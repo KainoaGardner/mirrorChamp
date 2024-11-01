@@ -8,6 +8,35 @@ int FPS = 60;
 int WIDTH = 500;
 int HEIGHT = 500;
 
+class MoveParticle {
+public:
+  float size;
+  int rgb[3];
+  sf::Vector2i pos;
+
+  MoveParticle(float cSize, int red, int green, int blue, float startX,
+               float startY) {
+    rgb[0] = red;
+    rgb[1] = green;
+    rgb[2] = blue;
+    size = cSize;
+    pos.x = startX;
+    pos.y = startY;
+  }
+
+  void display(sf::RenderWindow &window) {
+    size--;
+    sf::CircleShape sprite(size);
+    sprite.setFillColor(sf::Color::Transparent);
+    sprite.setOutlineThickness(3);
+    sprite.setOutlineColor(sf::Color(rgb[0], rgb[1], rgb[2]));
+
+    sprite.setPosition(pos.x + size / 2, pos.y + size / 2);
+    window.draw(sprite);
+  }
+  bool alive() { return size > 0; }
+};
+
 class Projectile {
   sf::CircleShape sprite;
   float speed;
@@ -56,9 +85,14 @@ public:
   bool moving = false;
 
   float qCooldown = 2 * FPS;
+  float wCooldown = 1 * FPS;
+
   float qTimer = 0;
+  float wTimer = 0;
 
   std::vector<Projectile> projectileList;
+  std::vector<sf::RectangleShape> mirrorList;
+  std::vector<MoveParticle> moveParticleList;
 
   Player(int cSize, int red, int green, int blue, float startX, float startY,
          float cSpeed, sf::Font cFont) {
@@ -89,6 +123,18 @@ public:
       projectileList[i].update();
     }
 
+    for (int i = moveParticleList.size() - 1; i >= 0; i--) {
+      if (!moveParticleList[i].alive()) {
+        moveParticleList.erase(moveParticleList.begin() + i);
+        continue;
+      }
+      moveParticleList[i].display(window);
+    }
+
+    for (int i = mirrorList.size() - 1; i >= 0; i--) {
+      window.draw(mirrorList[i]);
+    }
+
     if (qTimer > 0)
       qText.setString(std::to_string(int(ceil(qTimer / FPS))));
     else
@@ -106,6 +152,13 @@ public:
     moving = true;
     movePoint[0] = x - size;
     movePoint[1] = y - size;
+    MoveParticle moveParticle(30, 46, 204, 113, movePoint[0] + size / 2,
+                              movePoint[1] + size / 2);
+    if (moveParticleList.size() == 0) {
+      moveParticleList.push_back(moveParticle);
+    } else {
+      moveParticleList[0] = (moveParticle);
+    }
   }
 
 private:
@@ -113,9 +166,16 @@ private:
     if (qTimer > 0) {
       qTimer -= 1;
     }
+    if (wTimer > 0) {
+      wTimer -= 1;
+    }
 
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Q)) {
       q(mousePos);
+    }
+
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) {
+      w(mousePos);
     }
 
     sf::Text text;
@@ -125,20 +185,29 @@ private:
     if (qTimer <= 0) {
       std::cout << "Q\n";
       qTimer = qCooldown;
+      return;
+    }
 
-      float xDif = mousePos.x - sprite.getPosition().x + size / 2;
-      float yDif = mousePos.y - sprite.getPosition().y + size / 2;
+    float xDif = mousePos.x - sprite.getPosition().x + size / 2;
+    float yDif = mousePos.y - sprite.getPosition().y + size / 2;
 
-      float angle = float(atan2(yDif, xDif));
+    float angle = float(atan2(yDif, xDif));
 
-      for (int i = 0; i < 5; i++) {
-        float newX =
-            sprite.getPosition().x + (i * size / 2) * cos(angle) + size / 2;
-        float newY =
-            sprite.getPosition().y + (i * size / 2) * sin(angle) + size / 2;
-        Projectile bullet(10, 255, 255, 255, newX, newY, 20, angle);
-        projectileList.push_back(bullet);
-      }
+    for (int i = 0; i < 5; i++) {
+      float newX =
+          sprite.getPosition().x + (i * size / 2) * cos(angle) + size / 2;
+      float newY =
+          sprite.getPosition().y + (i * size / 2) * sin(angle) + size / 2;
+      Projectile bullet(10, 255, 255, 255, newX, newY, 20, angle);
+      projectileList.push_back(bullet);
+    }
+  }
+
+  void w(sf::Vector2i mousePos) {
+    if (wTimer <= 0) {
+      std::cout << "W\n";
+      wTimer = wCooldown;
+      return;
     }
   }
 
@@ -152,19 +221,6 @@ private:
     float distance = sqrt((xDif * xDif) + (yDif * yDif));
     float angle = float(atan2(yDif, xDif));
 
-    sf::Text text;
-
-    // select the font
-    text.setFont(font); // font is a sf::Font
-
-    // set the string to display
-    text.setString("Hello world");
-
-    // set the character size
-    text.setCharacterSize(24); // in pixels, not points!
-
-    // set the color
-    text.setFillColor(sf::Color::Red);
     if (distance < speed) {
       moving = false;
       sprite.setPosition(movePoint[0] + size / 2, movePoint[1] + size / 2);
@@ -197,7 +253,6 @@ int main() {
                 HEIGHT / 2 - playerRadius, 4, font);
 
   while (window.isOpen()) {
-    std::cout << projectileList.size() << "\n";
 
     sf::Event event;
     while (window.pollEvent(event)) {
