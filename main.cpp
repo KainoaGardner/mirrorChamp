@@ -5,8 +5,9 @@
 #include <string>
 
 int FPS = 60;
-int WIDTH = 500;
-int HEIGHT = 500;
+int WIDTH = 800;
+int HEIGHT = 800;
+float PI = atan(1) * 4;
 
 class MoveParticle {
 public:
@@ -27,38 +28,44 @@ public:
   void display(sf::RenderWindow &window) {
     size--;
     sf::CircleShape sprite(size);
+    sprite.setOrigin(size, size);
     sprite.setFillColor(sf::Color::Transparent);
     sprite.setOutlineThickness(3);
     sprite.setOutlineColor(sf::Color(rgb[0], rgb[1], rgb[2]));
 
-    sprite.setPosition(pos.x + size / 2, pos.y + size / 2);
+    sprite.setPosition(pos.x, pos.y);
     window.draw(sprite);
   }
   bool alive() { return size > 0; }
 };
 
 class Projectile {
-  sf::CircleShape sprite;
+public:
+  sf::RectangleShape sprite;
   float speed;
-  float size;
+  float length;
+  float width;
   float angle;
 
-public:
-  Projectile(float cSize, int red, int green, int blue, float startX,
-             float startY, float cSpeed, float cAngle) {
-    sprite = sf::CircleShape(cSize);
-    sprite.setFillColor(sf::Color(red, green, blue));
-    sprite.setPosition(startX + cSize / 2, startY + cSize / 2);
-
-    size = cSize;
+  Projectile(float cLength, float cWidth, int red, int green, int blue,
+             float startX, float startY, float cSpeed, float cAngle) {
+    length = cLength;
+    width = cWidth;
     speed = cSpeed;
     angle = cAngle;
+
+    sprite = sf::RectangleShape(sf::Vector2f(length, width));
+    sprite.setOrigin(length / 2, width / 2);
+    sprite.setFillColor(sf::Color(red, green, blue));
+    float degrees = angle * (180 / PI);
+
+    sprite.rotate(degrees);
+    sprite.setPosition(startX, startY);
   }
 
   bool alive() {
     sf::Vector2f pos = sprite.getPosition();
-    if ((pos.x + size / 2) < 0 or (pos.x + size / 2) >= WIDTH or
-        (pos.y + size / 2) < 0 or (pos.y + size / 2) >= HEIGHT) {
+    if ((pos.x) < 0 or (pos.x) >= WIDTH or (pos.y) < 0 or (pos.y) >= HEIGHT) {
       return false;
     }
     return true;
@@ -73,10 +80,89 @@ public:
   }
 };
 
+class Mirror {
+  float lifeTimer;
+
+public:
+  sf::RectangleShape sprite;
+  float length;
+  float width;
+  float angle;
+
+  Mirror(float cLength, float cWidth, int red, int green, int blue,
+         float startX, float startY, float cAngle) {
+    length = cLength;
+    width = cWidth;
+    angle = cAngle;
+    lifeTimer = 5 * FPS;
+    float degrees = angle * (180 / PI) + 90;
+
+    sprite = sf::RectangleShape(sf::Vector2f(length, width));
+    sprite.setOrigin(length / 2, width / 2);
+    sprite.setFillColor(sf::Color(red, green, blue));
+    sprite.setPosition(startX, startY);
+
+    sprite.rotate(degrees);
+  }
+
+  bool alive() {
+    if (lifeTimer < 0) {
+      return false;
+    }
+    return true;
+  }
+
+  void display(sf::RenderWindow &window) { window.draw(sprite); }
+
+  void update() { lifeTimer--; }
+};
+
+class Prism {
+  float lifeTimer;
+
+public:
+  sf::CircleShape sprite;
+  float size;
+  float angle;
+
+  Prism(float cSize, int red, int green, int blue, float startX, float startY,
+        float cAngle) {
+    size = cSize;
+    angle = cAngle;
+    lifeTimer = 5 * FPS;
+    float degrees = angle * (180 / PI) + 30;
+
+    sprite = sf::CircleShape(size, 3);
+    sprite.setOrigin(size, size);
+    sprite.setFillColor(sf::Color(red, green, blue));
+
+    sprite.setPosition(startX, startY);
+    sprite.rotate(degrees);
+    // sprite.rotate(30);
+  }
+
+  bool alive() {
+    if (lifeTimer < 0) {
+      return false;
+    }
+    return true;
+  }
+
+  void display(sf::RenderWindow &window) { window.draw(sprite); }
+
+  void update() {
+    lifeTimer--;
+    // sprite.rotate(.5);
+  }
+};
+
 class Player {
 public:
   sf::Font font;
   sf::Text qText;
+  sf::Text wText;
+  sf::Text eText;
+  sf::Text rText;
 
   sf::CircleShape sprite;
   int size;
@@ -85,13 +171,18 @@ public:
   bool moving = false;
 
   float qCooldown = 2 * FPS;
-  float wCooldown = 1 * FPS;
+  float wCooldown = 5 * FPS;
+  float eCooldown = 1 * FPS;
+  float rCooldown = 30 * FPS;
 
   float qTimer = 0;
   float wTimer = 0;
+  float eTimer = 0;
+  float rTimer = 0;
 
   std::vector<Projectile> projectileList;
-  std::vector<sf::RectangleShape> mirrorList;
+  std::vector<Mirror> mirrorList;
+  std::vector<Prism> prismList;
   std::vector<MoveParticle> moveParticleList;
 
   Player(int cSize, int red, int green, int blue, float startX, float startY,
@@ -99,20 +190,44 @@ public:
 
     font = cFont;
     qText.setFont(font);
-    qText.setCharacterSize(30);
+    qText.setCharacterSize(50);
     qText.setFillColor(sf::Color::Black);
+    qText.setPosition(WIDTH * (1.0 / 8) - 25, HEIGHT - 75);
 
-    sprite = sf::CircleShape(cSize);
-    sprite.setFillColor(sf::Color(red, green, blue));
-    sprite.setPosition(startX, startY);
+    wText.setFont(font);
+    wText.setCharacterSize(50);
+    wText.setFillColor(sf::Color::Black);
+    wText.setPosition(WIDTH * (3.0 / 8) - 25, HEIGHT - 75);
+
+    eText.setFont(font);
+    eText.setCharacterSize(50);
+    eText.setFillColor(sf::Color::Black);
+    eText.setPosition(WIDTH * (5.0 / 8) - 25, HEIGHT - 75);
+
+    rText.setFont(font);
+    rText.setCharacterSize(50);
+    rText.setFillColor(sf::Color::Black);
+    rText.setPosition(WIDTH * (7.0 / 8) - 25, HEIGHT - 75);
+
     size = cSize;
     movePoint[0] = startX;
     movePoint[1] = startY;
     speed = cSpeed;
+
+    sprite = sf::CircleShape(size);
+    sprite.setOrigin(size, size);
+    sprite.setFillColor(sf::Color(red, green, blue));
+    sprite.setPosition(movePoint[0], movePoint[1]);
   }
 
   void display(sf::RenderWindow &window) {
-    window.draw(sprite);
+    for (int i = moveParticleList.size() - 1; i >= 0; i--) {
+      if (!moveParticleList[i].alive()) {
+        moveParticleList.erase(moveParticleList.begin() + i);
+        continue;
+      }
+      moveParticleList[i].display(window);
+    }
 
     for (int i = projectileList.size() - 1; i >= 0; i--) {
       if (!projectileList[i].alive()) {
@@ -123,24 +238,52 @@ public:
       projectileList[i].update();
     }
 
-    for (int i = moveParticleList.size() - 1; i >= 0; i--) {
-      if (!moveParticleList[i].alive()) {
-        moveParticleList.erase(moveParticleList.begin() + i);
+    for (int i = mirrorList.size() - 1; i >= 0; i--) {
+      if (!mirrorList[i].alive()) {
+        mirrorList.erase(mirrorList.begin() + i);
         continue;
       }
-      moveParticleList[i].display(window);
+
+      mirrorList[i].update();
+      mirrorList[i].display(window);
     }
 
-    for (int i = mirrorList.size() - 1; i >= 0; i--) {
-      window.draw(mirrorList[i]);
+    for (int i = prismList.size() - 1; i >= 0; i--) {
+      if (!prismList[i].alive()) {
+        prismList.erase(prismList.begin() + i);
+        continue;
+      }
+
+      prismList[i].update();
+      prismList[i].display(window);
     }
+
+    window.draw(sprite);
 
     if (qTimer > 0)
       qText.setString(std::to_string(int(ceil(qTimer / FPS))));
     else
       qText.setString("Q");
 
+    if (wTimer > 0)
+      wText.setString(std::to_string(int(ceil(wTimer / FPS))));
+    else
+      wText.setString("W");
+
+    if (eTimer > 0)
+      eText.setString(std::to_string(int(ceil(eTimer / FPS))));
+    else
+      eText.setString("E");
+
+    if (rTimer > 0)
+      rText.setString(std::to_string(int(ceil(rTimer / FPS))));
+    else
+      rText.setString("R");
+
     window.draw(qText);
+    window.draw(wText);
+    window.draw(eText);
+    window.draw(rText);
   }
 
   void update(sf::Vector2i mousePos) {
@@ -150,10 +293,9 @@ public:
 
   void setMovePoint(float x, float y) {
     moving = true;
-    movePoint[0] = x - size;
-    movePoint[1] = y - size;
-    MoveParticle moveParticle(30, 46, 204, 113, movePoint[0] + size / 2,
-                              movePoint[1] + size / 2);
+    movePoint[0] = x;
+    movePoint[1] = y;
+    MoveParticle moveParticle(30, 46, 204, 113, movePoint[0], movePoint[1]);
     if (moveParticleList.size() == 0) {
       moveParticleList.push_back(moveParticle);
     } else {
@@ -170,6 +312,14 @@ private:
       wTimer -= 1;
     }
 
+    if (eTimer > 0) {
+      eTimer -= 1;
+    }
+
+    if (rTimer > 0) {
+      rTimer -= 1;
+    }
+
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Q)) {
       q(mousePos);
     }
@@ -178,56 +328,131 @@ private:
       w(mousePos);
     }
 
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::F)) {
+      e(mousePos);
+    }
+
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::P)) {
+      r();
+    }
+
     sf::Text text;
   }
 
   void q(sf::Vector2i mousePos) {
-    if (qTimer <= 0) {
-      std::cout << "Q\n";
-      qTimer = qCooldown;
+    if (qTimer > 0) {
       return;
     }
 
-    float xDif = mousePos.x - sprite.getPosition().x + size / 2;
-    float yDif = mousePos.y - sprite.getPosition().y + size / 2;
+    std::cout << "Q\n";
+    float xDif = mousePos.x - sprite.getPosition().x;
+    float yDif = mousePos.y - sprite.getPosition().y;
 
     float angle = float(atan2(yDif, xDif));
 
-    for (int i = 0; i < 5; i++) {
-      float newX =
-          sprite.getPosition().x + (i * size / 2) * cos(angle) + size / 2;
-      float newY =
-          sprite.getPosition().y + (i * size / 2) * sin(angle) + size / 2;
-      Projectile bullet(10, 255, 255, 255, newX, newY, 20, angle);
-      projectileList.push_back(bullet);
-    }
+    float newX = sprite.getPosition().x;
+    float newY = sprite.getPosition().y;
+    Projectile bullet(50, 10, 255, 255, 255, newX, newY, 20, angle);
+    projectileList.push_back(bullet);
+
+    qTimer = qCooldown;
   }
 
   void w(sf::Vector2i mousePos) {
-    if (wTimer <= 0) {
-      std::cout << "W\n";
-      wTimer = wCooldown;
+    if (wTimer > 0) {
       return;
     }
+
+    std::cout << "W\n";
+    float xDif = mousePos.x - sprite.getPosition().x;
+    float yDif = mousePos.y - sprite.getPosition().y;
+    float angle = float(atan2(yDif, xDif));
+
+    Prism prism(30, 255, 255, 255, mousePos.x, mousePos.y, angle);
+    prismList.push_back(prism);
+
+    std::cout << "W\n";
+
+    wTimer = wCooldown;
+  }
+
+  void e(sf::Vector2i mousePos) {
+    if (eTimer > 0) {
+      return;
+    }
+
+    float xDif = mousePos.x - sprite.getPosition().x;
+    float yDif = mousePos.y - sprite.getPosition().y;
+    float angle = float(atan2(yDif, xDif));
+
+    Mirror mirror(75, 10, 255, 255, 255, mousePos.x, mousePos.y, angle);
+    mirrorList.push_back(mirror);
+
+    std::cout << "E\n";
+
+    eTimer = eCooldown;
+  }
+
+  void r() {
+    if (rTimer > 0) {
+      return;
+    }
+
+    std::cout << "R\n";
+    float rDistance = 300;
+
+    for (int i = 0; i < 18; i++) {
+      float angle = i * 20;
+      float radians = angle * PI / 180;
+
+      float newX = sprite.getPosition().x + rDistance * cos(radians);
+      float newY = sprite.getPosition().y + rDistance * sin(radians);
+
+      Mirror mirror(75, 10, 255, 255, 255, newX, newY, radians);
+      mirrorList.push_back(mirror);
+    }
+
+    rTimer = rCooldown;
   }
 
   void move() {
     if (!moving)
       return;
 
-    float xDif = movePoint[0] - sprite.getPosition().x + size / 2;
-    float yDif = movePoint[1] - sprite.getPosition().y + size / 2;
+    float xDif = movePoint[0] - sprite.getPosition().x;
+    float yDif = movePoint[1] - sprite.getPosition().y;
 
     float distance = sqrt((xDif * xDif) + (yDif * yDif));
     float angle = float(atan2(yDif, xDif));
 
     if (distance < speed) {
       moving = false;
-      sprite.setPosition(movePoint[0] + size / 2, movePoint[1] + size / 2);
+      sprite.setPosition(movePoint[0], movePoint[1]);
     } else {
       float moveX = speed * cos(angle);
       float moveY = speed * sin(angle);
       sprite.move(moveX, moveY);
+    }
+  }
+
+  void checkReflection() {
+    for (int i = 0; i < projectileList.size(); i++) {
+      for (int j = 0; j < mirrorList.size(); j++) {
+        Projectile bullet = projectileList[i];
+        Mirror mirror = mirrorList[j];
+
+        float bulletX = bullet.sprite.getPosition().x;
+        float bulletY = bullet.sprite.getPosition().y;
+
+        float bulletNewX = 0;
+        float bulletNewY = 0;
+
+        float mirrorX = mirror.sprite.getPosition().x;
+        float mirrorY = mirror.sprite.getPosition().y;
+
+        if (bulletX < mirrorX && bulletNewX > mirrorX) {
+        }
+      }
     }
   }
 };
@@ -237,10 +462,6 @@ int main() {
   if (!font.loadFromFile("./Lemon.otf")) {
     return 0;
   }
-
-  std::vector<Projectile> projectileList;
-  Projectile testBullet(10, 0, 0, 0, WIDTH / 2, HEIGHT / 2, 5, 5);
-  projectileList.push_back(testBullet);
 
   sf::RenderWindow window(sf::VideoMode(WIDTH, HEIGHT), "Test");
   window.setFramerateLimit(FPS);
