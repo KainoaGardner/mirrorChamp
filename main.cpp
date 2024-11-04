@@ -46,13 +46,18 @@ public:
   float length;
   float width;
   float angle;
+  bool isAlive = true;
+
+  unsigned level = 0;
 
   Projectile(float cLength, float cWidth, int red, int green, int blue,
-             float startX, float startY, float cSpeed, float cAngle) {
+             float startX, float startY, float cSpeed, float cAngle,
+             unsigned cLevel) {
     length = cLength;
     width = cWidth;
     speed = cSpeed;
     angle = cAngle;
+    level = cLevel;
 
     sprite = sf::RectangleShape(sf::Vector2f(length, width));
     sprite.setOrigin(length / 2, width / 2);
@@ -64,8 +69,10 @@ public:
   }
 
   bool alive() {
+
     sf::Vector2f pos = sprite.getPosition();
-    if ((pos.x) < 0 or (pos.x) >= WIDTH or (pos.y) < 0 or (pos.y) >= HEIGHT) {
+    if ((pos.x) < 0 or (pos.x) >= WIDTH or (pos.y) < 0 or (pos.y) >= HEIGHT or
+        !isAlive) {
       return false;
     }
     return true;
@@ -172,13 +179,18 @@ public:
 
   float qCooldown = 2 * FPS;
   float wCooldown = 5 * FPS;
-  float eCooldown = 1 * FPS;
+  float eCooldown = 4 * FPS;
   float rCooldown = 30 * FPS;
 
   float qTimer = 0;
   float wTimer = 0;
   float eTimer = 0;
   float rTimer = 0;
+
+  bool ePressed = false;
+
+  int eStock = 3;
+  int eStockMax = 3;
 
   std::vector<Projectile> projectileList;
   std::vector<Mirror> mirrorList;
@@ -270,10 +282,10 @@ public:
     else
       wText.setString("W");
 
-    if (eTimer > 0)
+    if (eStock <= 0)
       eText.setString(std::to_string(int(ceil(eTimer / FPS))));
     else
-      eText.setString("E");
+      eText.setString("E " + std::to_string(eStock));
 
     if (rTimer > 0)
       rText.setString(std::to_string(int(ceil(rTimer / FPS))));
@@ -286,9 +298,28 @@ public:
     window.draw(rText);
   }
 
-  void update(sf::Vector2i mousePos) {
+  void update(sf::RenderWindow &window, sf::Vector2i mousePos) {
     move();
-    abilities(mousePos);
+    checkReflection();
+    if (qTimer > 0) {
+      qTimer -= 1;
+    }
+    if (wTimer > 0) {
+      wTimer -= 1;
+    }
+
+    if (eTimer > 0) {
+      eTimer -= 1;
+    } else {
+      if (eStock < 3) {
+        eStock++;
+      }
+      eTimer = eCooldown;
+    }
+
+    if (rTimer > 0) {
+      rTimer -= 1;
+    }
   }
 
   void setMovePoint(float x, float y) {
@@ -303,42 +334,24 @@ public:
     }
   }
 
-private:
-  void abilities(sf::Vector2i mousePos) {
-    if (qTimer > 0) {
-      qTimer -= 1;
-    }
-    if (wTimer > 0) {
-      wTimer -= 1;
-    }
-
-    if (eTimer > 0) {
-      eTimer -= 1;
-    }
-
-    if (rTimer > 0) {
-      rTimer -= 1;
-    }
-
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Q)) {
+  void abilities(char ability, sf::Vector2i mousePos) {
+    switch (ability) {
+    case 'Q':
       q(mousePos);
-    }
-
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) {
+      break;
+    case 'W':
       w(mousePos);
-    }
-
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::F)) {
+      break;
+    case 'E':
       e(mousePos);
-    }
-
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::P)) {
+      break;
+    case 'R':
       r();
+      break;
     }
-
-    sf::Text text;
   }
 
+private:
   void q(sf::Vector2i mousePos) {
     if (qTimer > 0) {
       return;
@@ -352,7 +365,7 @@ private:
 
     float newX = sprite.getPosition().x;
     float newY = sprite.getPosition().y;
-    Projectile bullet(50, 10, 255, 255, 255, newX, newY, 20, angle);
+    Projectile bullet(50, 10, 255, 255, 255, newX, newY, 20, angle, 0);
     projectileList.push_back(bullet);
 
     qTimer = qCooldown;
@@ -377,7 +390,7 @@ private:
   }
 
   void e(sf::Vector2i mousePos) {
-    if (eTimer > 0) {
+    if (eStock <= 0) {
       return;
     }
 
@@ -390,7 +403,10 @@ private:
 
     std::cout << "E\n";
 
-    eTimer = eCooldown;
+    if (eStock == eStockMax) {
+      eTimer = eCooldown;
+    }
+    eStock--;
   }
 
   void r() {
@@ -444,16 +460,126 @@ private:
         float bulletX = bullet.sprite.getPosition().x;
         float bulletY = bullet.sprite.getPosition().y;
 
-        float bulletNewX = 0;
-        float bulletNewY = 0;
+        sf::Vector2f bullet1 = {
+            bulletX + float(bullet.length / 1.5) * float(cos(bullet.angle)),
+            bulletY + float(bullet.length / 1.5) * float(sin(bullet.angle))};
+
+        sf::Vector2f bullet2 = {
+            bulletX - float(bullet.length / 1.5) * float(cos(bullet.angle)),
+            bulletY - float(bullet.length / 1.5) * float(sin(bullet.angle))};
 
         float mirrorX = mirror.sprite.getPosition().x;
         float mirrorY = mirror.sprite.getPosition().y;
 
-        if (bulletX < mirrorX && bulletNewX > mirrorX) {
+        sf::Vector2f mirror1 = {
+            mirrorX + float(mirror.length / 1.5) * float(sin(mirror.angle)),
+            mirrorY + float(mirror.length / 1.5) * float(cos(mirror.angle))};
+
+        sf::Vector2f mirror2 = {
+            mirrorX - float(mirror.length / 1.5) * float(sin(mirror.angle)),
+            mirrorY - float(mirror.length / 1.5) * float(cos(mirror.angle))};
+
+        // printf("Bullet (%.2f,%.2f),(%.2f,%.2f)\n", bullet1.x, bullet1.y,
+        //        bullet2.x, bullet2.y);
+        // printf("Mirror (%.2f,%.2f),(%.2f,%.2f)\n", mirror1.x, mirror1.y,
+        //        mirror2.x, mirror2.y);
+
+        if (doIntersect(bullet1, bullet2, mirror1, mirror2)) {
+          std::cout << "Intersect\n";
+          // printf("%.2f  %.2f", bullet.angle * 180 / PI,
+          //        mirror.angle * 180 / PI);
+
+          // float newAngle =
+          //     acos((bullet.angle *(mirror.angle + PI / 2)) /
+          //          (std::abs(bullet.length) * std::abs(mirror.length));
+          //
+
+          // std::cout << newAngle << "\n";
+          projectileList[i].angle += PI;
+          projectileList[i].sprite.rotate(PI);
+        }
+      }
+
+      for (int j = 0; j < prismList.size(); j++) {
+        float xDif = prismList[j].sprite.getPosition().x -
+                     projectileList[i].sprite.getPosition().x;
+        float yDif = prismList[j].sprite.getPosition().y -
+                     projectileList[i].sprite.getPosition().y;
+
+        float distance = sqrt(xDif * xDif + yDif * yDif);
+
+        if (distance <= prismList[j].size && projectileList[i].level == 0) {
+          projectileList[i].isAlive = false;
+
+          float sX = projectileList[i].sprite.getPosition().x;
+          float sY = projectileList[i].sprite.getPosition().y;
+          float sAngle = projectileList[i].angle;
+          float sSize = prismList[j].size;
+
+          Projectile bulletRed(
+              50, 10, 255, 0, 0, sX + sSize * cos(sAngle - (PI / 8)),
+              sY + sSize * sin(sAngle - (PI / 8)), 20, sAngle - (PI / 8), 1);
+          Projectile bulletBlue(
+              50, 10, 0, 0, 255, sX + sSize * cos(sAngle + (PI / 8)),
+              sY + sSize * sin(sAngle + (PI / 8)), 20, sAngle + (PI / 8), 1);
+
+          Projectile bulletGreen(50, 10, 0, 255, 0, sX + sSize * cos(sAngle),
+                                 sY + sSize * sin(sAngle), 20, sAngle, 1);
+
+          projectileList.push_back(bulletRed);
+          projectileList.push_back(bulletBlue);
+          projectileList.push_back(bulletGreen);
         }
       }
     }
+  }
+  bool onSegment(sf::Vector2f p, sf::Vector2f q, sf::Vector2f r) {
+    if (q.x <= std::max(p.x, r.x) && q.x >= std::min(p.x, r.x) &&
+        q.y <= std::max(p.y, r.y) && q.y >= std::min(p.y, r.y))
+      return true;
+
+    return false;
+  }
+
+  int orientation(sf::Vector2f p, sf::Vector2f q, sf::Vector2f r) {
+    int val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+
+    if (val == 0)
+      return 0; // collinear
+
+    return (val > 0) ? 1 : 2; // clock or counterclock wise
+  }
+
+  // The main function that returns true if line segment 'p1q1'
+  // and 'p2q2' intersect.
+  bool doIntersect(sf::Vector2f p1, sf::Vector2f q1, sf::Vector2f p2,
+                   sf::Vector2f q2) {
+    int o1 = orientation(p1, q1, p2);
+    int o2 = orientation(p1, q1, q2);
+    int o3 = orientation(p2, q2, p1);
+    int o4 = orientation(p2, q2, q1);
+
+    // General case
+    if (o1 != o2 && o3 != o4)
+      return true;
+
+    // p1, q1 and p2 are collinear and p2 lies on segment p1q1
+    if (o1 == 0 && onSegment(p1, p2, q1))
+      return true;
+
+    // p1, q1 and q2 are collinear and q2 lies on segment p1q1
+    if (o2 == 0 && onSegment(p1, q2, q1))
+      return true;
+
+    // p2, q2 and p1 are collinear and p1 lies on segment p2q2
+    if (o3 == 0 && onSegment(p2, p1, q2))
+      return true;
+
+    // p2, q2 and q1 are collinear and q1 lies on segment p2q2
+    if (o4 == 0 && onSegment(p2, q1, q2))
+      return true;
+
+    return false; // Doesn't fall in any of the above cases
   }
 };
 
@@ -479,6 +605,24 @@ int main() {
     while (window.pollEvent(event)) {
       if (event.type == sf::Event::Closed)
         window.close();
+
+      if (event.type == sf::Event::KeyPressed) {
+        if (event.key.code == sf::Keyboard::Q) {
+          sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+          player.abilities('Q', mousePos);
+        }
+        if (event.key.code == sf::Keyboard::W) {
+          sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+          player.abilities('W', mousePos);
+        }
+        if (event.key.code == sf::Keyboard::F) {
+          sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+          player.abilities('E', mousePos);
+        }
+        if (event.key.code == sf::Keyboard::P) {
+          player.abilities('R', {});
+        }
+      }
     }
 
     if (sf::Mouse::isButtonPressed(sf::Mouse::Right)) {
@@ -490,7 +634,7 @@ int main() {
 
     window.clear();
     window.draw(bg);
-    player.update(sf::Mouse::getPosition(window));
+    player.update(window, sf::Mouse::getPosition(window));
     player.display(window);
 
     window.display();
