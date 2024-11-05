@@ -46,18 +46,23 @@ public:
   float length;
   float width;
   float angle;
+
+  int bounceCooldown = 0;
+  int prismCooldown = 0;
+  int aliveTime = 0;
   bool isAlive = true;
 
   unsigned level = 0;
 
   Projectile(float cLength, float cWidth, int red, int green, int blue,
              float startX, float startY, float cSpeed, float cAngle,
-             unsigned cLevel) {
+             unsigned cLevel, int cPrismCooldown) {
     length = cLength;
     width = cWidth;
     speed = cSpeed;
     angle = cAngle;
     level = cLevel;
+    prismCooldown = cPrismCooldown;
 
     sprite = sf::RectangleShape(sf::Vector2f(length, width));
     sprite.setOrigin(length / 2, width / 2);
@@ -71,8 +76,8 @@ public:
   bool alive() {
 
     sf::Vector2f pos = sprite.getPosition();
-    if ((pos.x) < 0 or (pos.x) >= WIDTH or (pos.y) < 0 or (pos.y) >= HEIGHT or
-        !isAlive) {
+    if ((pos.x) < 0 || (pos.x) >= WIDTH || (pos.y) < 0 || (pos.y) >= HEIGHT ||
+        !isAlive || aliveTime > (0.4 * FPS)) {
       return false;
     }
     return true;
@@ -84,6 +89,16 @@ public:
     float moveX = speed * cos(angle);
     float moveY = speed * sin(angle);
     sprite.move(moveX, moveY);
+
+    if (bounceCooldown > 0) {
+      bounceCooldown--;
+    }
+
+    if (prismCooldown > 0) {
+      prismCooldown--;
+    }
+
+    aliveTime++;
   }
 };
 
@@ -97,11 +112,11 @@ public:
   float angle;
 
   Mirror(float cLength, float cWidth, int red, int green, int blue,
-         float startX, float startY, float cAngle) {
+         float startX, float startY, float cAngle, float cAliveTime) {
     length = cLength;
     width = cWidth;
     angle = cAngle;
-    lifeTimer = 5 * FPS;
+    lifeTimer = cAliveTime * FPS;
     float degrees = angle * (180 / PI) + 90;
 
     sprite = sf::RectangleShape(sf::Vector2f(length, width));
@@ -145,7 +160,6 @@ public:
 
     sprite.setPosition(startX, startY);
     sprite.rotate(degrees);
-    // sprite.rotate(30);
   }
 
   bool alive() {
@@ -157,10 +171,7 @@ public:
 
   void display(sf::RenderWindow &window) { window.draw(sprite); }
 
-  void update() {
-    lifeTimer--;
-    // sprite.rotate(.5);
-  }
+  void update() { lifeTimer--; }
 };
 
 class Player {
@@ -177,7 +188,7 @@ public:
   float movePoint[2];
   bool moving = false;
 
-  float qCooldown = 2 * FPS;
+  float qCooldown = 1 * FPS;
   float wCooldown = 5 * FPS;
   float eCooldown = 4 * FPS;
   float rCooldown = 30 * FPS;
@@ -365,7 +376,7 @@ private:
 
     float newX = sprite.getPosition().x;
     float newY = sprite.getPosition().y;
-    Projectile bullet(50, 10, 255, 255, 255, newX, newY, 20, angle, 0);
+    Projectile bullet(75, 15, 255, 255, 255, newX, newY, 20, angle, 0, 0);
     projectileList.push_back(bullet);
 
     qTimer = qCooldown;
@@ -398,7 +409,7 @@ private:
     float yDif = mousePos.y - sprite.getPosition().y;
     float angle = float(atan2(yDif, xDif));
 
-    Mirror mirror(75, 10, 255, 255, 255, mousePos.x, mousePos.y, angle);
+    Mirror mirror(100, 10, 255, 255, 255, mousePos.x, mousePos.y, angle, 15);
     mirrorList.push_back(mirror);
 
     std::cout << "E\n";
@@ -415,7 +426,7 @@ private:
     }
 
     std::cout << "R\n";
-    float rDistance = 300;
+    float rDistance = 250;
 
     for (int i = 0; i < 18; i++) {
       float angle = i * 20;
@@ -424,7 +435,7 @@ private:
       float newX = sprite.getPosition().x + rDistance * cos(radians);
       float newY = sprite.getPosition().y + rDistance * sin(radians);
 
-      Mirror mirror(75, 10, 255, 255, 255, newX, newY, radians);
+      Mirror mirror(75, 10, 255, 255, 255, newX, newY, radians, 5);
       mirrorList.push_back(mirror);
     }
 
@@ -453,6 +464,10 @@ private:
 
   void checkReflection() {
     for (int i = 0; i < projectileList.size(); i++) {
+
+      if (projectileList[i].bounceCooldown > 0) {
+        continue;
+      }
       for (int j = 0; j < mirrorList.size(); j++) {
         Projectile bullet = projectileList[i];
         Mirror mirror = mirrorList[j];
@@ -461,42 +476,38 @@ private:
         float bulletY = bullet.sprite.getPosition().y;
 
         sf::Vector2f bullet1 = {
-            bulletX + float(bullet.length / 1.5) * float(cos(bullet.angle)),
-            bulletY + float(bullet.length / 1.5) * float(sin(bullet.angle))};
+            bulletX + float(bullet.length / 2) * float(cos(bullet.angle)),
+            bulletY + float(bullet.length / 2) * float(sin(bullet.angle))};
 
         sf::Vector2f bullet2 = {
-            bulletX - float(bullet.length / 1.5) * float(cos(bullet.angle)),
-            bulletY - float(bullet.length / 1.5) * float(sin(bullet.angle))};
+            bulletX - float(bullet.length / 2) * float(cos(bullet.angle)),
+            bulletY - float(bullet.length / 2) * float(sin(bullet.angle))};
 
         float mirrorX = mirror.sprite.getPosition().x;
         float mirrorY = mirror.sprite.getPosition().y;
 
         sf::Vector2f mirror1 = {
-            mirrorX + float(mirror.length / 1.5) * float(sin(mirror.angle)),
-            mirrorY + float(mirror.length / 1.5) * float(cos(mirror.angle))};
+            mirrorX +
+                float(mirror.length / 2) * float(cos(mirror.angle - (PI / 2))),
+            mirrorY +
+                float(mirror.length / 2) * float(sin(mirror.angle - (PI / 2)))};
 
         sf::Vector2f mirror2 = {
-            mirrorX - float(mirror.length / 1.5) * float(sin(mirror.angle)),
-            mirrorY - float(mirror.length / 1.5) * float(cos(mirror.angle))};
-
-        // printf("Bullet (%.2f,%.2f),(%.2f,%.2f)\n", bullet1.x, bullet1.y,
-        //        bullet2.x, bullet2.y);
-        // printf("Mirror (%.2f,%.2f),(%.2f,%.2f)\n", mirror1.x, mirror1.y,
-        //        mirror2.x, mirror2.y);
+            mirrorX -
+                float(mirror.length / 2) * float(cos(mirror.angle - (PI / 2))),
+            mirrorY -
+                float(mirror.length / 2) * float(sin(mirror.angle - (PI / 2)))};
 
         if (doIntersect(bullet1, bullet2, mirror1, mirror2)) {
           std::cout << "Intersect\n";
-          // printf("%.2f  %.2f", bullet.angle * 180 / PI,
-          //        mirror.angle * 180 / PI);
+          float angleDif = bullet.angle - mirror.angle;
+          float newAngle = mirror.angle - angleDif + PI;
 
-          // float newAngle =
-          //     acos((bullet.angle *(mirror.angle + PI / 2)) /
-          //          (std::abs(bullet.length) * std::abs(mirror.length));
-          //
+          projectileList[i].angle = newAngle;
+          projectileList[i].sprite.setRotation(newAngle * 180 / PI);
 
-          // std::cout << newAngle << "\n";
-          projectileList[i].angle += PI;
-          projectileList[i].sprite.rotate(PI);
+          projectileList[i].bounceCooldown = 3;
+          projectileList[i].aliveTime = -.3 * FPS;
         }
       }
 
@@ -508,23 +519,35 @@ private:
 
         float distance = sqrt(xDif * xDif + yDif * yDif);
 
-        if (distance <= prismList[j].size && projectileList[i].level == 0) {
+        if (distance <= prismList[j].size &&
+            projectileList[i].prismCooldown <= 0) {
+
           projectileList[i].isAlive = false;
+          projectileList[i].prismCooldown = 3;
+
+          float prevLevel = projectileList[i].level;
+          if (prevLevel >= 6 || projectileList.size() >= 100) {
+            continue;
+          }
 
           float sX = projectileList[i].sprite.getPosition().x;
           float sY = projectileList[i].sprite.getPosition().y;
           float sAngle = projectileList[i].angle;
-          float sSize = prismList[j].size;
+          float sSize = 0;
+          float nLength = 50 - (10 * (prevLevel + 1));
 
-          Projectile bulletRed(
-              50, 10, 255, 0, 0, sX + sSize * cos(sAngle - (PI / 8)),
-              sY + sSize * sin(sAngle - (PI / 8)), 20, sAngle - (PI / 8), 1);
-          Projectile bulletBlue(
-              50, 10, 0, 0, 255, sX + sSize * cos(sAngle + (PI / 8)),
-              sY + sSize * sin(sAngle + (PI / 8)), 20, sAngle + (PI / 8), 1);
+          Projectile bulletRed(50, 10, 255, 0, 0,
+                               sX + sSize * cos(sAngle - (PI / 8)),
+                               sY + sSize * sin(sAngle - (PI / 8)), 20,
+                               sAngle - (PI / 8), prevLevel + 1, 3);
+          Projectile bulletBlue(50, 10, 0, 0, 255,
+                                sX + sSize * cos(sAngle + (PI / 8)),
+                                sY + sSize * sin(sAngle + (PI / 8)), 20,
+                                sAngle + (PI / 8), prevLevel + 1, 3);
 
-          Projectile bulletGreen(50, 10, 0, 255, 0, sX + sSize * cos(sAngle),
-                                 sY + sSize * sin(sAngle), 20, sAngle, 1);
+          Projectile bulletGreen(25, 10, 0, 255, 0, sX + sSize * cos(sAngle),
+                                 sY + sSize * sin(sAngle), 20, sAngle,
+                                 prevLevel + 1, 3);
 
           projectileList.push_back(bulletRed);
           projectileList.push_back(bulletBlue);
@@ -533,6 +556,7 @@ private:
       }
     }
   }
+
   bool onSegment(sf::Vector2f p, sf::Vector2f q, sf::Vector2f r) {
     if (q.x <= std::max(p.x, r.x) && q.x >= std::min(p.x, r.x) &&
         q.y <= std::max(p.y, r.y) && q.y >= std::min(p.y, r.y))
@@ -627,7 +651,7 @@ int main() {
 
     if (sf::Mouse::isButtonPressed(sf::Mouse::Right)) {
       sf::Vector2i mousePos = sf::Mouse::getPosition(window);
-      if (0 <= mousePos.x and mousePos.x < WIDTH and 0 <= mousePos.y and
+      if (0 <= mousePos.x && mousePos.x < WIDTH && 0 <= mousePos.y &&
           mousePos.y < HEIGHT)
         player.setMovePoint(mousePos.x, mousePos.y);
     }
